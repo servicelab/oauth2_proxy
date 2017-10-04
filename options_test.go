@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -34,7 +35,6 @@ func TestNewOptions(t *testing.T) {
 	assert.NotEqual(t, nil, err)
 
 	expected := errorMsg([]string{
-		"missing setting: upstream",
 		"missing setting: cookie-secret",
 		"missing setting: client-id",
 		"missing setting: client-secret"})
@@ -160,11 +160,36 @@ func TestCookieRefreshMustBeLessThanCookieExpire(t *testing.T) {
 	o := testOptions()
 	assert.Equal(t, nil, o.Validate())
 
-	o.CookieSecret = "0123456789abcdef"
+	o.CookieSecret = "0123456789abcdefabcd"
 	o.CookieRefresh = o.CookieExpire
 	assert.NotEqual(t, nil, o.Validate())
 
 	o.CookieRefresh -= time.Duration(1)
+	assert.Equal(t, nil, o.Validate())
+}
+
+func TestBase64CookieSecret(t *testing.T) {
+	o := testOptions()
+	assert.Equal(t, nil, o.Validate())
+
+	// 32 byte, base64 (urlsafe) encoded key
+	o.CookieSecret = "yHBw2lh2Cvo6aI_jn_qMTr-pRAjtq0nzVgDJNb36jgQ="
+	assert.Equal(t, nil, o.Validate())
+
+	// 32 byte, base64 (urlsafe) encoded key, w/o padding
+	o.CookieSecret = "yHBw2lh2Cvo6aI_jn_qMTr-pRAjtq0nzVgDJNb36jgQ"
+	assert.Equal(t, nil, o.Validate())
+
+	// 24 byte, base64 (urlsafe) encoded key
+	o.CookieSecret = "Kp33Gj-GQmYtz4zZUyUDdqQKx5_Hgkv3"
+	assert.Equal(t, nil, o.Validate())
+
+	// 16 byte, base64 (urlsafe) encoded key
+	o.CookieSecret = "LFEqZYvYUwKwzn0tEuTpLA=="
+	assert.Equal(t, nil, o.Validate())
+
+	// 16 byte, base64 (urlsafe) encoded key, w/o padding
+	o.CookieSecret = "LFEqZYvYUwKwzn0tEuTpLA"
 	assert.Equal(t, nil, o.Validate())
 }
 
@@ -190,4 +215,18 @@ func TestValidateSignatureKeyUnsupportedAlgorithm(t *testing.T) {
 	err := o.Validate()
 	assert.Equal(t, err.Error(), "Invalid configuration:\n"+
 		"  unsupported signature hash algorithm: "+o.SignatureKey)
+}
+
+func TestValidateCookie(t *testing.T) {
+	o := testOptions()
+	o.CookieName = "_valid_cookie_name"
+	assert.Equal(t, nil, o.Validate())
+}
+
+func TestValidateCookieBadName(t *testing.T) {
+	o := testOptions()
+	o.CookieName = "_bad_cookie_name{}"
+	err := o.Validate()
+	assert.Equal(t, err.Error(), "Invalid configuration:\n"+
+		fmt.Sprintf("  invalid cookie name: %q", o.CookieName))
 }
